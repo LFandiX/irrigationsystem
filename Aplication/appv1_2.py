@@ -9,17 +9,6 @@ import requests
 # --- Konfigurasi Aplikasi ---
 app = Flask(__name__)
 
-# --- Konfigurasi MQTT ---
-app.config['MQTT_BROKER_URL'] = 'localhost'  
-app.config['MQTT_BROKER_PORT'] = 1883
-# app.config['MQTT_USERNAME'] = 'username_kamu'  # Ganti sesuai setup VPS
-# app.config['MQTT_PASSWORD'] = 'password_kamu'  # Ganti sesuai setup VPS
-app.config['MQTT_REFRESH_TIME'] = 1.0 
-app.config['MQTT_TLS_ENABLED'] = False
-
-mqtt = Mqtt(app)
-
-# --- Konfigurasi Database ---
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///irrigation.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -52,6 +41,18 @@ class SensorData(db.Model):
         }
     
 
+# --- KONFIGURASI WAJIB (Untuk VPS) ---
+# Gunakan 127.0.0.1 karena broker dan flask ada di satu mesin
+app.config['MQTT_BROKER_URL'] = '31.97.111.124'  
+app.config['MQTT_BROKER_PORT'] = 1883
+app.config['MQTT_REFRESH_TIME'] = 1.0
+app.config['MQTT_TLS_ENABLED'] = False
+
+mqtt = Mqtt(app)
+
+# --- Konfigurasi Database ---
+
+
 def get_rainfall_from_api():
     """Mengambil data precip_mm dari WeatherAPI.com"""
     try:
@@ -74,13 +75,18 @@ def get_rainfall_from_api():
 
 @mqtt.on_connect()
 def handle_connect(client, userdata, flags, rc):
-    """Berjalan otomatis saat Flask terhubung ke Broker MQTT"""
+    """Logika saat Flask berhasil nyambung ke Mosquitto"""
     if rc == 0:
-        print("Terhubung ke MQTT Broker!")
-        # Subscribe ke topik data sensor dari ESP32
+        print("\n" + "="*40)
+        print("✅ FLASK BERHASIL KONEK KE BROKER!")
+        print("📡 Subscribe ke topik: test/#")
+        print("="*40 + "\n")
+        
+        # Subscribe ke semua topik yang diawali 'test/'
+        # Tanda pagar (#) adalah wildcard
         mqtt.subscribe('kebun/data')
     else:
-        print("Gagal terhubung ke MQTT, kode:", rc)
+        print(f"❌ GAGAL KONEK. Kode Error: {rc}")
 
 @mqtt.on_message()
 def handle_mqtt_message(client, userdata, message):
