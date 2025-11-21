@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}History - Dashboard Irigasi{% endblock %}
+
+{% block content %}
+<style>
+    .chart-container {
+        background: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-3">Riwayat Grafik Sensor</h2>
+        <p>Menampilkan 50 data sensor terakhir yang tercatat.</p>
+    </div>
+</div>
+
+<div class="chart-container">
+    <h3>Kelembaban Tanah & Curah Hujan</h3>
+    <canvas id="soilRainChart"></canvas>
+</div>
+
+<div class="chart-container">
+    <h3>Suhu & Kelembaban Udara</h3>
+    <canvas id="tempHumidityChart"></canvas>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Referensi global untuk grafik agar bisa di-update
+    let soilRainChart, tempHumidityChart;
+
+    // Fungsi untuk membuat atau meng-update grafik
+    function createOrUpdateCharts(data) {
+        const soilCtx = document.getElementById('soilRainChart').getContext('2d');
+        const tempCtx = document.getElementById('tempHumidityChart').getContext('2d');
+
+        // --- Grafik Kelembaban Tanah & Curah Hujan ---
+        if (soilRainChart) {
+            soilRainChart.data.labels = data.labels;
+            soilRainChart.data.datasets[0].data = data.soil_moisture;
+            soilRainChart.data.datasets[1].data = data.rainfall;
+            soilRainChart.update();
+        } else {
+            soilRainChart = new Chart(soilCtx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Kelembaban Tanah (%)',
+                            data: data.soil_moisture,
+                            borderColor: '#007bff',
+                            backgroundColor: 'rgba(0,123,255,0.1)',
+                            tension: 0.1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Curah Hujan (mm)',
+                            data: data.rainfall,
+                            borderColor: '#17a2b8',
+                            backgroundColor: 'rgba(23,162,184,0.1)',
+                            type: 'bar',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        y: { type: 'linear', position: 'left', title: { display: true, text: 'Persen (%)' } },
+                        y1: { type: 'linear', position: 'right', title: { display: true, text: 'mm' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        }
+
+        // --- Grafik Suhu & Kelembaban Udara ---
+        if (tempHumidityChart) {
+            tempHumidityChart.data.labels = data.labels;
+            tempHumidityChart.data.datasets[0].data = data.temperature;
+            tempHumidityChart.data.datasets[1].data = data.humidity;
+            tempHumidityChart.update();
+        } else {
+            tempHumidityChart = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Suhu (°C)',
+                            data: data.temperature,
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220,53,69,0.1)',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Kelembaban Udara (%)',
+                            data: data.humidity,
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40,167,69,0.1)',
+                            tension: 0.1
+                        }
+                    ]
+                }
+            });
+        }
+    }
+
+    // Fungsi untuk mengambil data dari server
+    async function fetchData() {
+        try {
+            const response = await fetch('/api/chart-data');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            createOrUpdateCharts(data);
+        } catch (error) {
+            console.error("Gagal mengambil data grafik:", error);
+        }
+    }
+
+    // --- Event Listeners ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // Ambil data saat halaman dimuat
+        fetchData();
+        
+        // Atur agar data di-refresh setiap 30 detik
+        setInterval(fetchData, 30000); // 30000 ms = 30 detik
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Dashboard Irigasi{% endblock %}
+
+{% block content %}
+<style>
+    /* Gaya untuk card status */
+    .status-card {
+        border-radius: 12px;
+        color: white;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    .status-card h3 { font-size: 1.2rem; font-weight: 300; }
+    .status-card .value { font-size: 2.5rem; font-weight: 700; }
+    .status-card .label { font-size: 1rem; }
+    .timestamp { color: #666; font-style: italic; text-align: center; margin-bottom: 20px;}
+
+    /* Gaya untuk tombol pompa */
+    .pump-control .btn {
+        width: 100%;
+        padding: 15px;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .pump-status {
+        font-size: 1.5rem;
+        font-weight: bold;
+        text-align: center;
+        margin-top: 15px;
+    }
+</style>
+
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-3">Data Sensor Terkini</h2>
+        <p class="timestamp" id="last-updated">Terakhir diperbarui: -</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div id="soil-card" class="status-card bg-secondary">
+            <h3>KELEMBABAN TANAH</h3>
+            <span class="value" id="soil-value">--</span> <span class="label">%</span>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div id="temp-card" class="status-card bg-secondary">
+            <h3>SUHU UDARA</h3>
+            <span class="value" id="temp-value">--</span> <span class="label">°C</span>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div id="humidity-card" class="status-card bg-secondary">
+            <h3>KELEMBABAN UDARA</h3>
+            <span class="value" id="humidity-value">--</span> <span class="label">%</span>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div id="rain-card" class="status-card bg-secondary">
+            <h3>CURAH HUJAN</h3>
+            <span class="value" id="rain-value">--</span> <span class="label">mm</span>
+        </div>
+    </div>
+</div>
+
+<hr class="my-4">
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card pump-control shadow-sm border-0" style="border-radius: 12px;">
+            <div class="card-body p-4">
+                <h2 class="text-center mb-4">Kontrol Irigasi Manual</h2>
+                <button id="pump-button" class="btn btn-secondary">Memuat...</button>
+                <div class="mt-4">
+                    <h4 class="text-center">Status Pompa Saat Ini:</h4>
+                    <div id="pump-status-text" class="pump-status text-secondary">MEMUAT...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Batas Threshold untuk Indikator Warna ---
+    // Sesuaikan nilai ini sesuai kebutuhan lahan Anda
+    const THRESHOLDS = {
+        SOIL_LOW: 30,     // Di bawah ini, tanah kering (Merah)
+        SOIL_HIGH: 70,    // Di atas ini, tanah basah (Biru)
+        TEMP_WARN: 30,    // Di atas ini, suhu panas (Oranye)
+        TEMP_HOT: 34,     // Di atas ini, suhu sangat panas (Merah)
+        HUMID_LOW: 40,    // Di bawah ini, udara kering (Oranye)
+    };
+
+    // Fungsi untuk memperbarui UI (angka dan warna)
+    function updateUI(data) {
+        const sensors = data.sensor_data;
+        const pump = data.pump_status;
+
+        // 1. Perbarui Teks Data Sensor
+        document.getElementById('soil-value').textContent = sensors.soil_moisture.toFixed(1);
+        document.getElementById('temp-value').textContent = sensors.temperature.toFixed(1);
+        document.getElementById('humidity-value').textContent = sensors.humidity.toFixed(1);
+        document.getElementById('rain-value').textContent = sensors.rainfall.toFixed(1);
+        document.getElementById('last-updated').textContent = `Terakhir diperbarui: ${sensors.timestamp}`;
+
+        // 2. Perbarui Warna Indikator
+        updateCardColor('soil-card', sensors.soil_moisture, 'bg-danger', 'bg-success', 'bg-primary', THRESHOLDS.SOIL_LOW, THRESHOLDS.SOIL_HIGH);
+        updateCardColor('temp-card', sensors.temperature, 'bg-success', 'bg-warning', 'bg-danger', THRESHOLDS.TEMP_WARN, THRESHOLDS.TEMP_HOT);
+        updateCardColor('humidity-card', sensors.humidity, 'bg-warning', 'bg-success', 'bg-primary', THRESHOLDS.HUMID_LOW, 70); // Asumsi >70% bagus
+        
+        // Indikator Curah Hujan (Biru jika hujan, Abu-abu jika tidak)
+        const rainCard = document.getElementById('rain-card');
+        rainCard.className = 'status-card'; // Reset
+        if (sensors.rainfall > 0) {
+            rainCard.classList.add('bg-info');
+        } else {
+            rainCard.classList.add('bg-secondary');
+        }
+
+        // 3. Perbarui Status Pompa
+        const pumpButton = document.getElementById('pump-button');
+        const pumpStatusText = document.getElementById('pump-status-text');
+
+        if (pump.state === 'ON') {
+            pumpButton.textContent = 'Matikan Pompa Irigasi';
+            pumpButton.className = 'btn btn-danger'; // Tombol Merah
+            pumpStatusText.textContent = 'ON';
+            pumpStatusText.className = 'pump-status text-danger';
+        } else {
+            pumpButton.textContent = 'Aktifkan Pompa Irigasi';
+            pumpButton.className = 'btn btn-success'; // Tombol Hijau
+            pumpStatusText.textContent = 'OFF';
+            pumpStatusText.className = 'pump-status text-success';
+        }
+    }
+
+    // Fungsi helper untuk ganti warna card
+    function updateCardColor(elementId, value, classLow, classNormal, classHigh, thresholdLow, thresholdHigh) {
+        const card = document.getElementById(elementId);
+        card.className = 'status-card'; // Reset kelas
+        if (value < thresholdLow) {
+            card.classList.add(classLow);
+        } else if (value > thresholdHigh) {
+            card.classList.add(classHigh);
+        } else {
+            card.classList.add(classNormal);
+        }
+    }
+
+    // Fungsi untuk mengambil data dari server
+    async function fetchData() {
+        try {
+            const response = await fetch('/api/latest-status');
+            if (!response.ok) throw new Error('Network response was not ok');
+            const data = await response.json();
+            updateUI(data);
+        } catch (error) {
+            console.error("Gagal mengambil data status:", error);
+            // Anda bisa tambahkan UI error di sini
+        }
+    }
+
+    // Fungsi untuk mengirim perintah irigasi
+    async function toggleIrrigation() {
+        const pumpButton = document.getElementById('pump-button');
+        pumpButton.textContent = 'Mengirim Perintah...';
+        pumpButton.disabled = true;
+
+        try {
+            const response = await fetch('/irrigate', { method: 'POST' });
+            if (!response.ok) throw new Error('Gagal mengirim perintah');
+            const result = await response.json();
+            
+            // Perbarui UI berdasarkan respons server
+            const pumpStatusText = document.getElementById('pump-status-text');
+            if (result.state === 'ON') {
+                pumpButton.textContent = 'Matikan Pompa Irigasi';
+                pumpButton.className = 'btn btn-danger';
+                pumpStatusText.textContent = 'ON';
+                pumpStatusText.className = 'pump-status text-danger';
+            } else {
+                pumpButton.textContent = 'Aktifkan Pompa Irigasi';
+                pumpButton.className = 'btn btn-success';
+                pumpStatusText.textContent = 'OFF';
+                pumpStatusText.className = 'pump-status text-success';
+            }
+            alert(result.message); // Tampilkan pop-up notifikasi
+            
+        } catch (error) {
+            console.error("Error toggling irrigation:", error);
+            alert("Error: Gagal mengirim perintah.");
+        } finally {
+            pumpButton.disabled = false;
+        }
+    }
+
+    // --- Event Listeners ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // Ambil data saat halaman dimuat
+        fetchData();
+        
+        // Atur agar data di-refresh setiap 10 detik
+        setInterval(fetchData, 10000); // 10000 ms = 10 detik
+
+        // Tambahkan event ke tombol pompa
+        document.getElementById('pump-button').addEventListener('click', toggleIrrigation);
+    });
+</script>
+{% endblock %}
